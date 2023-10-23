@@ -15,7 +15,7 @@ But if you need one for your specific IP (for connecting from mobile) you need a
 2. Answer all questions (https://flaviocopes.com/express-https-self-signed-certificate/)
 3. Remember to fill you IP for the question `Common Name (e.g. server FQDN or YOUR name)`
 4. Add both (server.key and server.cert) to `backend/certs`
-4. Add the server.cert `frontend/certs` and rename it `server.cer`
+4. Add the server.cert to `frontend/certs` and rename it `server.cer`
 
 ## Run the Server
 
