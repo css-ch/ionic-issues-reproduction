@@ -5,7 +5,17 @@ const config: CapacitorConfig = {
   appName: 'ionic-issues-reproduction',
   webDir: 'www',
   server: {
-    androidScheme: 'https'
+    androidScheme: 'https',
+    iosScheme: 'httpsionic',
+  },
+  plugins: {
+    CapacitorHttp: {
+      enabled: true
+    },
+    SSLPinning: {
+      certs: ['certs/server.cer'],
+      excludedDomains: []
+    },
   }
 };
 

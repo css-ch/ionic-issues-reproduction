@@ -1,0 +1,147 @@
+diff --git a/node_modules/@capacitor/ios/Capacitor/Capacitor/Plugins/HttpRequestHandler.swift b/node_modules/@capacitor/ios/Capacitor/Capacitor/Plugins/HttpRequestHandler.swift
+index ea990d3..dd4be0b 100644
+--- a/node_modules/@capacitor/ios/Capacitor/Capacitor/Plugins/HttpRequestHandler.swift
++++ b/node_modules/@capacitor/ios/Capacitor/Capacitor/Plugins/HttpRequestHandler.swift
+@@ -131,9 +131,9 @@ open class HttpRequestHandler {
+ 
+         let contentType = (response.allHeaderFields["Content-Type"] as? String ?? "application/default").lowercased()
+ 
+-        if contentType.contains("application/json") || responseType == .json {
++        if contentType.contains("application/json") || contentType.contains("application/vnd.api+json") || responseType == .json { // PATCH: IAM responses fix
+             output["data"] = tryParseJson(data)
+-        } else if responseType == .arrayBuffer || responseType == .blob {
++        } else if contentType.contains("application/pdf") || responseType == .arrayBuffer || responseType == .blob {
+             output["data"] = data.base64EncodedString()
+         } else if responseType == .document || responseType == .text || responseType == .default {
+             output["data"] = String(data: data, encoding: .utf8)
+diff --git a/node_modules/@capacitor/ios/Capacitor/Capacitor/assets/native-bridge.js b/node_modules/@capacitor/ios/Capacitor/Capacitor/assets/native-bridge.js
+index 9eb1309..6ce24f8 100644
+--- a/node_modules/@capacitor/ios/Capacitor/Capacitor/assets/native-bridge.js
++++ b/node_modules/@capacitor/ios/Capacitor/Capacitor/assets/native-bridge.js
+@@ -64,6 +64,39 @@ var nativeBridge = (function (exports) {
+         }
+         return newFormData;
+     };
++    const b64toBlob = (b64Data, contentType='', sliceSize= 512) => {
++      const byteCharacters = atob(b64Data);
++      const byteArrays = [];
++
++      for (let offset = 0; offset < byteCharacters.length; offset += sliceSize) {
++        const slice = byteCharacters.slice(offset, offset + sliceSize);
++
++        const byteNumbers = new Array(slice.length);
++        for (let i = 0; i < slice.length; i++) {
++          byteNumbers[i] = slice.charCodeAt(i);
++        }
++
++        const byteArray = new Uint8Array(byteNumbers);
++        byteArrays.push(byteArray);
++      }
++
++      const blob = new Blob(byteArrays, {type: contentType});
++      return blob;
++    };
++  const lowercaseKeys = (obj) => {
++    if (!obj) {
++      return {};
++    }
++    return Object.keys(obj).reduce((accumulator, key) => {
++      accumulator[key.toLowerCase()] = obj[key];
++      return accumulator;
++    }, {});
++  };
++  const mergeHeaders = (headers1, headers2) => {
++    const headers1lower = lowercaseKeys(headers1);
++    const headers2lower = lowercaseKeys(headers2);
++    return Object.assign(Object.assign({}, headers1lower), headers2lower);
++  };
+     const convertBody = async (body, contentType) => {
+         if (body instanceof ReadableStream) {
+             const reader = body.getReader();
+@@ -82,7 +115,7 @@ var nativeBridge = (function (exports) {
+             }
+             let data = new TextDecoder().decode(concatenated);
+             let type;
+-            if (contentType === 'application/json') {
++            if (contentType === 'application/json' || contentType === 'application/vnd.api+json') { // PATCH: IAM responses fix
+                 try {
+                     data = JSON.parse(data);
+                 }
+@@ -120,7 +153,7 @@ var nativeBridge = (function (exports) {
+                 },
+             };
+         }
+-        else if (body instanceof File) {
++        else if (body instanceof File || body instanceof Blob) { // PATCH: file upload fix
+             const fileData = await readFileAsBase64(body);
+             return {
+                 data: fileData,
+@@ -128,6 +161,12 @@ var nativeBridge = (function (exports) {
+                 headers: { 'Content-Type': body.type },
+             };
+         }
++        else if (body instanceof URLSearchParams) { // PATCH: oidc-client-ts token call fix
++          return {
++            data: body.toString(),
++            type: 'string',
++          };
++        }
+         return { data: body, type: 'json' };
+     };
+     const initBridge = (w) => {
+@@ -469,8 +508,8 @@ var nativeBridge = (function (exports) {
+                     // fetch patch
+                     window.fetch = async (resource, options) => {
+                         const request = new Request(resource, options);
+-                        if (!(request.url.startsWith('http:') ||
+-                            request.url.startsWith('https:'))) {
++                        const url = resource instanceof Request ? resource.url : resource; // PATCH: @capacitor/android http: / https: detection after update fix
++                        if (!(url.startsWith('http:') || url.startsWith('https:'))) {
+                             return win.CapacitorWebFetch(resource, options);
+                         }
+                         const tag = `CapacitorHttp fetch ${Date.now()} ${resource}`;
+@@ -485,11 +524,11 @@ var nativeBridge = (function (exports) {
+                                 method: method,
+                                 data: requestData,
+                                 dataType: type,
+-                                headers: Object.assign(Object.assign({}, headers), optionHeaders),
++                                headers: mergeHeaders(headers, optionHeaders), // PATCH: IAM request fix
+                             });
+                             const contentType = nativeResponse.headers['Content-Type'] ||
+                                 nativeResponse.headers['content-type'];
+-                            let data = (contentType === null || contentType === void 0 ? void 0 : contentType.startsWith('application/json'))
++                            let data = (contentType === null || contentType === void 0 ? void 0 : (contentType.startsWith('application/json') || contentType.startsWith('application/vnd.api+json'))) // PATCH: IAM responses fix
+                                 ? JSON.stringify(nativeResponse.data)
+                                 : nativeResponse.data;
+                             // use null data for 204 No Content HTTP response
+@@ -613,8 +652,8 @@ var nativeBridge = (function (exports) {
+                                         url: this._url,
+                                         method: this._method,
+                                         data: data !== null ? data : undefined,
+-                                        headers: Object.assign(Object.assign({}, headers), otherHeaders),
+-                                        dataType: type,
++                                        headers: mergeHeaders(headers, otherHeaders), // PATCH: IAM request fix
++                                        dataType: type
+                                     })
+                                         .then((nativeResponse) => {
+                                         var _a;
+@@ -638,9 +677,7 @@ var nativeBridge = (function (exports) {
+                                                 this.response = responseString;
+                                             }
+                                             else if (this.responseType === 'blob') {
+-                                                this.response = new Blob([responseString], {
+-                                                    type: 'application/json',
+-                                                });
++                                              this.response = b64toBlob(responseString, this._headers['Content-Type'] || 'application/json'); // PATCH: file download fix
+                                             }
+                                             else if (this.responseType === 'arraybuffer') {
+                                                 const encoder = new TextEncoder();
+@@ -650,7 +687,7 @@ var nativeBridge = (function (exports) {
+                                             else {
+                                                 this.response = nativeResponse.data;
+                                             }
+-                                            this.responseText = ((_a = nativeResponse.headers['Content-Type']) === null || _a === void 0 ? void 0 : _a.startsWith('application/json'))
++                                            this.responseText = ((_a = nativeResponse.headers['Content-Type']) === null || _a === void 0 ? void 0 : (_a.startsWith('application/json') || _a.startsWith('application/vnd.api+json'))) // PATCH: IAM responses fix
+                                                 ? JSON.stringify(nativeResponse.data)
+                                                 : nativeResponse.data;
+                                             this.responseURL = nativeResponse.url;

@@ -1,0 +1,30 @@
+diff --git a/node_modules/@ionic-enterprise/ssl-pinning/ios/Plugin/SSLPinningPlugin.swift b/node_modules/@ionic-enterprise/ssl-pinning/ios/Plugin/SSLPinningPlugin.swift
+index 0834576..30c4d1d 100644
+--- a/node_modules/@ionic-enterprise/ssl-pinning/ios/Plugin/SSLPinningPlugin.swift
++++ b/node_modules/@ionic-enterprise/ssl-pinning/ios/Plugin/SSLPinningPlugin.swift
+@@ -76,7 +76,7 @@ public class SSLPinningHttpRequestHandler: HttpRequestHandler {
+     }
+
+     public static func sslRequest(_ call: CAPPluginCall, _ httpMethod: String?, _ config: InstanceConfiguration?) throws {
+-        guard let urlString = call.getString("url")?.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else { throw URLError(.badURL) }
++        guard let urlString = call.getString("url") else { throw URLError(.badURL) }
+         let method = httpMethod ?? call.getString("method", "GET")
+
+         // swiftlint:disable force_cast
+@@ -85,6 +85,7 @@ public class SSLPinningHttpRequestHandler: HttpRequestHandler {
+         let responseType = call.getString("responseType") ?? "text"
+         let connectTimeout = call.getDouble("connectTimeout")
+         let readTimeout = call.getDouble("readTimeout")
++        let dataType = call.getString("dataType") // PATCH: file upload fix
+
+         let request = try SSLCapacitorHttpRequestBuilder()
+             .setUrl(urlString)
+@@ -100,7 +101,7 @@ public class SSLPinningHttpRequestHandler: HttpRequestHandler {
+
+         if let data = call.options["data"] as? JSValue {
+             do {
+-                try request.setRequestBody(data)
++                try request.setRequestBody(data, dataType)
+             } catch {
+                 call.reject(error.localizedDescription, (error as NSError).domain, error, nil)
+                 return
