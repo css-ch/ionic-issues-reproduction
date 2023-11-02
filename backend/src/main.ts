@@ -17,6 +17,10 @@ https.createServer({
   console.log(`⚡️[server]: Server is running at https://localhost:${port}`);
 });
 
+// app.listen(port, ()=>{
+//   console.log(`⚡️[server]: Server is running at http://localhost:${port}`);
+// });
+
 app.use(cors());
 
 app.get('/', (req: Request, res: Response) => {
